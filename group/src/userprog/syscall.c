@@ -30,15 +30,31 @@ static void syscall_seek(int fd,unsigned position);
 static int syscall_tell(int fd);
 static void syscall_close(int fd);
 static double syscall_compute_e(int n);
+static tid_t sys_pthread_create(stub_fun sfun,pthread_fun tfun,const void* arg);
+static void sys_pthread_exit(void);
+static tid_t sys_pthread_join(tid_t tid);
+static bool sys_lock_init(lock_t* lock);
+static bool sys_lock_acquire(lock_t* lock);
+static bool sys_lock_release(lock_t* lock);
+static bool sys_sema_init(sema_t* sema,int val);
+static bool sys_sema_down(sema_t* sema);
+static bool sys_sema_up(sema_t* sema);
+static tid_t sys_get_tid(void);
+
+static bool valid_addr(const char* addr)
+{
+	return !(addr == NULL || !is_user_vaddr(addr)
+				|| pagedir_get_page(thread_current()->pcb->pagedir,addr) == NULL);
+}
 
 static void validate_byte(const char* byte)
 {
-	if(byte == NULL || !is_user_vaddr(byte)
-			|| pagedir_get_page(thread_current()->pcb->pagedir,byte) == NULL)
+	if(!valid_addr(byte))
 	{
 		syscall_exit(-1);
 	}
 }
+
 static void validate_string(char* string)
 {
 	char* ch = string;
@@ -50,12 +66,14 @@ static void validate_string(char* string)
 		++ch;
 	}
 }
+
 static void validate_buffer(const void* buffer,size_t len)
 {
 	char* addr_b = (char*)buffer;
 	for(size_t i=0;i<len;i++)
 		validate_byte(addr_b++);
 }
+
 static void validate_args(const uint32_t* argv,int count)
 {
 	validate_buffer(argv,count * sizeof(uint32_t));
@@ -164,6 +182,54 @@ static void syscall_handler(struct intr_frame* f)
 		f->eax = syscall_compute_e((int)args[1]);
 		break;
 
+	case SYS_PT_CREATE:
+		validate_args(args+1,3);
+		f->eax = sys_pthread_create((stub_fun)args[1],(pthread_fun)args[2],(const void*)args[3]);
+		break;
+
+	case SYS_PT_EXIT:
+		sys_pthread_exit();
+		break;
+
+	case SYS_PT_JOIN:
+		validate_args(args+1,1);
+		f->eax = sys_pthread_join((tid_t)args[1]);
+		break;
+
+	case SYS_LOCK_INIT:
+		validate_args(args+1,1);
+		f->eax = sys_lock_init((lock_t*)args[1]);
+		break;
+
+	case SYS_LOCK_ACQUIRE:
+		validate_args(args+1,1);
+		f->eax = sys_lock_acquire((lock_t*)args[1]);
+		break;
+
+	case SYS_LOCK_RELEASE:
+		validate_args(args+1,1);
+		f->eax = sys_lock_release((lock_t*)args[1]);
+		break;
+
+	case SYS_SEMA_INIT:
+		validate_args(args+1,2);
+		f->eax = sys_sema_init((sema_t*)args[1],(int)args[2]);
+		break;
+
+	case SYS_SEMA_DOWN:
+		validate_args(args+1,1);
+		f->eax = sys_sema_down((sema_t*)args[1]);
+		break;
+
+	case SYS_SEMA_UP:
+		validate_args(args+1,1);
+		f->eax = sys_sema_up((sema_t*)args[1]);
+		break;
+
+	case SYS_GET_TID:
+		f->eax = sys_get_tid();
+		break;
+
 	default:
 		break;
 	}
@@ -173,7 +239,7 @@ static void syscall_exit(int status)
 {
 	struct thread* t = thread_current();
 	if(t->pcb->ppcb != NULL)
-		childList_get(&t->pcb->ppcb->child_list,t->tid)->exit_status = status;
+		childList_get(&t->pcb->ppcb->child_list,t->pcb->main_thread->tid)->exit_status = status;
 	printf("%s: exit(%d)\n", thread_current()->pcb->process_name, status);
 	process_exit();
 }
@@ -352,4 +418,94 @@ static void syscall_close(int fd)
 static double syscall_compute_e(int n)
 {
 	return sys_sum_to_e(n);
+}
+
+static tid_t sys_pthread_create(stub_fun sfun,pthread_fun tfun,const void* arg)
+{
+	return pthread_execute(sfun,tfun,arg);
+}
+
+static void sys_pthread_exit(void)
+{
+	pthread_exit();
+}
+
+static tid_t sys_pthread_join(tid_t tid)
+{
+	return pthread_join(tid);
+}
+
+static bool sys_lock_init(lock_t* lock)
+{
+	if(!valid_addr(lock))
+		return false;
+	lock_t n_lock = new_lock();
+	if(n_lock == -128)
+		return false;
+	*lock = n_lock;
+	return true;
+}
+
+static bool sys_lock_acquire(lock_t* lock)
+{
+	if(!valid_addr(lock))
+		return false;
+	struct lock* ls = get_lock(*lock);
+	if(ls == NULL || lock_held_by_current_thread(ls))
+		return false;
+	
+	lock_acquire(ls);
+	return true;
+}
+
+static bool sys_lock_release(lock_t* lock)
+{
+	if(!valid_addr(lock))
+		return false;
+	struct lock* ls = get_lock(*lock);
+	if(ls == NULL || lock_held_by_current_thread(ls))
+		return false;
+	
+	lock_release(ls);
+	return true;
+}
+
+static bool sys_sema_init(sema_t* sema,int val)
+{
+	if(!valid_addr(sema) || val < 0)
+		return false;
+	sema_t n_sema = new_sema(val);
+	if(n_sema == -128)
+		return false;
+	*sema = n_sema;
+	return true;
+}
+
+static bool sys_sema_down(sema_t* sema)
+{
+	if(!valid_addr(sema))
+		return false;
+	struct semaphore* ss = get_sema(*sema);
+	if(ss == NULL)
+		return false;
+	
+	sema_down(ss);
+	return true;
+}
+
+static bool sys_sema_up(sema_t* sema)
+{
+	if(!valid_addr(sema))
+		return false;
+	struct semaphore* ss = get_sema(*sema);
+	if(ss == NULL)
+		return false;
+	
+	sema_up(ss);
+	return true;
+}
+
+static tid_t sys_get_tid(void)
+{
+	return thread_tid();
 }

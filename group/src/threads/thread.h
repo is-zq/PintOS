@@ -93,7 +93,7 @@ struct thread {
   struct list_elem allelem;  /* List element for all threads list. */
 
   /* Shared between thread.c and synch.c. */
-  struct list_elem elem; /* List element. */
+  struct list_elem elem;	 /* List element. */
 
   /* List element for sleep list */
   int64_t end_tick;
@@ -101,6 +101,8 @@ struct thread {
 
   struct lock* waiting_lock;
   struct list lock_list;
+
+  uint8_t* user_stack;		  /* User stack pointer */
 
 #ifdef USERPROG
   /* Owned by process.c. */
@@ -135,6 +137,7 @@ void thread_print_stats(void);
 
 typedef void thread_func(void* aux);
 tid_t thread_create(const char* name, int priority, thread_func*, void*);
+struct thread* thread_create_norun(const char* name, int priority, thread_func*, void*);
 
 void thread_block(void);
 void thread_unblock(struct thread*);

@@ -176,23 +176,36 @@ void thread_print_stats(void) {
    The code provided sets the new thread's `priority' member to
    PRIORITY, but no actual priority scheduling is implemented.
    Priority scheduling is the goal of Problem 1-3. */
-tid_t thread_create(const char* name, int priority, thread_func* function, void* aux) {
+tid_t thread_create(const char* name, int priority, thread_func* function, void* aux)
+{
+	struct thread* t = thread_create_norun(name,priority,function,aux);
+	if(t == NULL)
+		return TID_ERROR;
+
+	/* Add to run queue. */
+	thread_unblock(t);
+
+	if(active_sched_policy == SCHED_PRIO && !is_highest_priority())
+		thread_yield();
+	return t->tid;
+}
+
+struct thread* thread_create_norun(const char* name, int priority, thread_func* function, void* aux) {
   struct thread* t;
   struct kernel_thread_frame* kf;
   struct switch_entry_frame* ef;
   struct switch_threads_frame* sf;
-  tid_t tid;
 
   ASSERT(function != NULL);
 
   /* Allocate thread. */
   t = palloc_get_page(PAL_ZERO);
   if (t == NULL)
-    return TID_ERROR;
+    return NULL;
 
   /* Initialize thread. */
   init_thread(t, name, priority);
-  tid = t->tid = allocate_tid();
+  t->tid = allocate_tid();
 
   /* Stack frame for kernel_thread(). */
   kf = alloc_frame(t, sizeof *kf);
@@ -209,12 +222,7 @@ tid_t thread_create(const char* name, int priority, thread_func* function, void*
   sf->eip = switch_entry;
   sf->ebp = 0;
 
-  /* Add to run queue. */
-  thread_unblock(t);
-
-  if(active_sched_policy == SCHED_PRIO && !is_highest_priority())
-	  thread_yield();
-  return tid;
+  return t;
 }
 
 /* Puts the current thread to sleep.  It will not be scheduled
@@ -464,6 +472,7 @@ static void init_thread(struct thread* t, const char* name, int priority) {
   t->status = THREAD_BLOCKED;
   strlcpy(t->name, name, sizeof t->name);
   t->stack = (uint8_t*)t + PGSIZE;
+  t->user_stack = NULL;
   t->priority = priority;
   t->effe_priority = priority;
   t->waiting_lock = NULL;

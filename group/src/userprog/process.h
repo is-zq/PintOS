@@ -13,6 +13,8 @@
 /* PIDs and TIDs are the same type. PID should be
    the TID of the main thread of the process */
 typedef tid_t pid_t;
+typedef char lock_t;
+typedef char sema_t;
 
 /* Thread functions (Project 2: Multithreading) */
 typedef void (*pthread_fun)(void*);
@@ -38,6 +40,32 @@ typedef struct ChildNode
 	struct list_elem elem;
 }ChildNode;
 
+typedef struct PthreadNode
+{
+	struct thread* tcb;
+	bool exited;
+	bool joined;
+	bool join_main;
+	struct lock lock;
+	struct semaphore sema;
+	struct semaphore wait_main;
+	struct list_elem elem;
+}PthreadNode;
+
+typedef struct LockNode
+{
+	lock_t id;
+	struct lock lock;
+	struct list_elem elem;
+}LockNode;
+
+typedef struct SemaNode
+{
+	sema_t id;
+	struct semaphore sema;
+	struct list_elem elem;
+}SemaNode;
+
 /* The process control block for a given process. Since
    there can be multiple threads per process, we need a separate
    PCB from the TCB. All TCBs in a process will have a pointer
@@ -45,13 +73,18 @@ typedef struct ChildNode
    of the process, which is `special`. */
 struct process {
   /* Owned by process.c. */
-  uint32_t* pagedir;          /* Page directory. */
-  char process_name[16];      /* Name of the main thread */
-  struct thread* main_thread; /* Pointer to main thread */
-  struct file* exec_file;	  /* Executable file */
-  struct file* fd_table[MAX_FD]; /* File despcriptor table */
-  struct process* ppcb;		  /* Parent PCB */
-  struct list child_list;	  /* List for child processes */
+  uint32_t* pagedir;			/* Page directory. */
+  char process_name[16];		/* Name of the main thread */
+  struct thread* main_thread;	/* Pointer to main thread */
+  struct file* exec_file;		/* Executable file */
+  struct file* fd_table[MAX_FD];/* File despcriptor table */
+  struct process* ppcb;			/* Parent PCB */
+  struct list child_list;		/* List for child processes */
+  struct list thread_list;		/* List for pthreads */
+  struct list lock_list;		/* List for locks */
+  struct list sema_list;		/* List for semaphores */
+  lock_t lock_id;
+  sema_t sema_id;
 };
 
 void userprog_init(void);
@@ -68,5 +101,10 @@ tid_t pthread_execute(stub_fun, pthread_fun, void*);
 tid_t pthread_join(tid_t);
 void pthread_exit(void);
 void pthread_exit_main(void);
+
+lock_t new_lock();
+struct lock* get_lock(lock_t id);
+sema_t new_sema(int val);
+struct sema* get_sema(sema_t id);
 
 #endif /* userprog/process.h */
