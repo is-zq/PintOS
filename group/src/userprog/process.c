@@ -163,7 +163,9 @@ pid_t process_execute(const char* file_name) {
   strlcpy(exec_name,file_name,name_len);
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create(exec_name, PRI_DEFAULT, start_process, fn_copy);
+  void** arg = (void**)malloc(sizeof(void*) * 2);
+  arg[0] = (void*)fn_copy; arg[1] = (void*)t->pcb->pwd;
+  tid = thread_create(exec_name, PRI_DEFAULT, start_process, (void*)arg);
   if (tid == TID_ERROR)
     palloc_free_page(fn_copy);
   free(exec_name);
@@ -172,6 +174,7 @@ pid_t process_execute(const char* file_name) {
   LoadNode* ln = loadList_add(tid);
   sema_down(&ln->k_sema);
   pid_t ret = ln->loaded ? tid : -1;
+  free(arg);
 
   ChildNode* cn = childList_add(&t->pcb->child_list,tid);
   if(ret != -1)
@@ -191,8 +194,10 @@ pid_t process_execute(const char* file_name) {
 
 /* A thread function that loads a user process and starts it
    running. */
-static void start_process(void* file_name_) {
-  char* file_name = (char*)file_name_;
+static void start_process(void* arg_) {
+  void** arg = (void**)arg_;
+  char* file_name = (char*)arg[0];
+  struct dir* pwd = (struct dir*)arg[1];
   struct thread* t = thread_current();
   struct intr_frame if_;
   bool success, pcb_success;
@@ -210,6 +215,10 @@ static void start_process(void* file_name_) {
 
     // Continue initializing the PCB as normal
     t->pcb->main_thread = t;
+	if(pwd != NULL)
+		t->pcb->pwd = dir_reopen(pwd);
+	else
+		t->pcb->pwd = dir_open_root();
     strlcpy(t->pcb->process_name, t->name, sizeof t->name);
 	list_init(&t->pcb->child_list);
 	memset(t->pcb->fd_table,0,sizeof(t->pcb->fd_table));
@@ -375,17 +384,25 @@ void process_exit(void) {
   childList_destroy(&pcb_to_free->child_list);
 
   lock_acquire(&file_lock);
-  struct file* fd_to_free;
+  void* fd_to_free;
+  bool is_dir;
   for(int i=3;i<MAX_FD;i++)	//close all fd
   {
 	  fd_to_free = pcb_to_free->fd_table[i];
+	  is_dir = pcb_to_free->isdir_table[i];
 	  if(fd_to_free != NULL)
-		  file_close(fd_to_free);
+	  {
+		  if(is_dir)
+			  dir_close((struct dir*)fd_to_free);
+		  else
+			  file_close((struct file*)fd_to_free);
+	  }
   }
   file_allow_write(pcb_to_free->exec_file);
   file_close(pcb_to_free->exec_file);
   lock_release(&file_lock);
 
+  dir_close(pcb_to_free->pwd);
   cur->pcb = NULL;
   free(pcb_to_free);
 
@@ -495,7 +512,7 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   process_activate();
 
   /* Open executable file. */
-  file = filesys_open(file_name);
+  file = filesys_open(file_name, t->pcb->pwd);
   if (file == NULL) {
     printf("load: %s: open failed\n", file_name);
     goto done;

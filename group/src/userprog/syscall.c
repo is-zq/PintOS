@@ -8,6 +8,7 @@
 #include "userprog/pagedir.h"
 #include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/inode.h"
 #include "devices/input.h"
 #include "devices/shutdown.h"
 #include "lib/float.h"
@@ -22,7 +23,7 @@ static pid_t syscall_exec(const char *cmd_line);
 static int syscall_wait(pid_t pid);
 static bool syscall_create(const char* file,unsigned initial_size);
 static bool syscall_remove(const char* file);
-static int syscall_open(const char* file);
+static int syscall_open(const char* name);
 static int syscall_filesize(int fd);
 static int syscall_read(int fd,void* buffer,unsigned size);
 static int syscall_write(int fd,const void* buffer,unsigned size);
@@ -30,6 +31,11 @@ static void syscall_seek(int fd,unsigned position);
 static int syscall_tell(int fd);
 static void syscall_close(int fd);
 static double syscall_compute_e(int n);
+static bool syscall_chdir(const char* dir);
+static bool syscall_mkdir(const char* dir);
+static bool syscall_readdir(int fd,char* name);
+static bool syscall_isdir(int fd);
+static int syscall_inumber(int fd);
 
 static void validate_byte(const char* byte)
 {
@@ -164,6 +170,31 @@ static void syscall_handler(struct intr_frame* f)
 		f->eax = syscall_compute_e((int)args[1]);
 		break;
 
+	case SYS_CHDIR:
+		validate_args(args+1,1);
+		f->eax = syscall_chdir((const char*)args[1]);
+		break;
+
+	case SYS_MKDIR:
+		validate_args(args+1,1);
+		f->eax = syscall_mkdir((const char*)args[1]);
+		break;
+
+	case SYS_READDIR:
+		validate_args(args+1,2);
+		f->eax = syscall_readdir((int)args[1],(char*)args[2]);
+		break;
+
+	case SYS_ISDIR:
+		validate_args(args+1,1);
+		f->eax = syscall_isdir((int)args[1]);
+		break;
+
+	case SYS_INUMBER:
+		validate_args(args+1,1);
+		f->eax = syscall_inumber((int)args[1]);
+		break;
+
 	default:
 		break;
 	}
@@ -201,7 +232,7 @@ static int syscall_wait(pid_t pid)
 static bool syscall_create(const char* file,unsigned initial_size)
 {
 	lock_acquire(&file_lock);
-	bool ret = filesys_create(file,initial_size);
+	bool ret = filesys_create(file,initial_size,thread_current()->pcb->pwd);
 	lock_release(&file_lock);
 	return ret;
 }
@@ -209,17 +240,17 @@ static bool syscall_create(const char* file,unsigned initial_size)
 static bool syscall_remove(const char* file)
 {
 	lock_acquire(&file_lock);
-	bool ret = filesys_remove(file);
+	bool ret = filesys_remove(file,thread_current()->pcb->pwd);
 	lock_release(&file_lock);
 	return ret;
 }
 
-static int syscall_open(const char* file)
+static int syscall_open(const char* name)
 {
 	struct process* pcb = thread_current()->pcb;
 	lock_acquire(&file_lock);
-	struct file* new_file = filesys_open(file);
-	if(new_file == NULL)
+	struct file* file = filesys_open(name,thread_current()->pcb->pwd);
+	if(file == NULL)
 	{
 		lock_release(&file_lock);
 		return -1;
@@ -228,13 +259,24 @@ static int syscall_open(const char* file)
 	{
 		if(pcb->fd_table[i] == NULL)
 		{
-			pcb->fd_table[i] = new_file;
+			if(inode_isdir(file_get_inode(file)))
+			{
+				struct dir* dir = dir_open(inode_reopen(file_get_inode(file)));
+				file_close(file);
+				pcb->isdir_table[i] = true;
+				pcb->fd_table[i] = dir;
+			}
+			else
+			{
+				pcb->isdir_table[i] = false;
+				pcb->fd_table[i] = file;
+			}
 			lock_release(&file_lock);
 			return i;
 		}
 	}
 	/* Full */
-	file_close(new_file);
+	file_close(file);
 	lock_release(&file_lock);
 	return -1;
 }
@@ -290,6 +332,8 @@ static int syscall_write(int fd,const void *buffer,unsigned size)
 	else
 	{
 		struct process* pcb = thread_current()->pcb;
+		if(pcb->isdir_table[fd])
+			return -1;
 		lock_acquire(&file_lock);
 		if(pcb->fd_table[fd] == NULL)
 		{
@@ -344,7 +388,10 @@ static void syscall_close(int fd)
 		lock_release(&file_lock);
 		return;
 	}
-	file_close(pcb->fd_table[fd]);
+	if(pcb->isdir_table[fd])
+		dir_close(pcb->fd_table[fd]);
+	else
+		file_close(pcb->fd_table[fd]);
 	pcb->fd_table[fd] = NULL;
 	lock_release(&file_lock);
 }
@@ -352,4 +399,58 @@ static void syscall_close(int fd)
 static double syscall_compute_e(int n)
 {
 	return sys_sum_to_e(n);
+}
+
+static bool syscall_chdir(const char* dir)
+{
+	lock_acquire(&file_lock);
+	bool ret = filesys_chdir(dir,&thread_current()->pcb->pwd);
+	lock_release(&file_lock);
+	return ret;
+}
+
+static bool syscall_mkdir(const char* dir)
+{
+	lock_acquire(&file_lock);
+	bool ret = filesys_mkdir(dir,thread_current()->pcb->pwd);
+	lock_release(&file_lock);
+	return ret;
+}
+
+static bool syscall_readdir(int fd,char* name)
+{
+	struct process* pcb = thread_current()->pcb;
+	if(!pcb->isdir_table[fd])
+		return false;
+	lock_acquire(&file_lock);
+	bool ret = dir_readdir((struct dir*)pcb->fd_table[fd],name);
+	lock_release(&file_lock);
+	return ret;
+}
+
+static bool syscall_isdir(int fd)
+{
+	struct process* pcb = thread_current()->pcb;
+	return pcb->isdir_table[fd];
+}
+
+static int syscall_inumber(int fd)
+{
+	int ret = 0;
+	struct process* pcb = thread_current()->pcb;
+
+	lock_acquire(&file_lock);
+	if(pcb->isdir_table[fd])
+	{
+		struct dir* dir = (struct dir*)pcb->fd_table[fd];
+		ret = inode_get_inumber(dir_get_inode(dir));
+	}
+	else
+	{
+		struct file* file = (struct file*)pcb->fd_table[fd];
+		ret = inode_get_inumber(file_get_inode(file));
+	}
+	lock_release(&file_lock);
+
+	return ret;
 }

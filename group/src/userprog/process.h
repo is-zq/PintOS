@@ -2,6 +2,7 @@
 #define USERPROG_PROCESS_H
 
 #include "threads/thread.h"
+#include "filesys/directory.h"
 #include <stdint.h>
 
 // At most 8MB can be allocated to the stack
@@ -45,13 +46,15 @@ typedef struct ChildNode
    of the process, which is `special`. */
 struct process {
   /* Owned by process.c. */
-  uint32_t* pagedir;          /* Page directory. */
-  char process_name[16];      /* Name of the main thread */
-  struct thread* main_thread; /* Pointer to main thread */
-  struct file* exec_file;	  /* Executable file */
-  struct file* fd_table[MAX_FD]; /* File despcriptor table */
-  struct process* ppcb;		  /* Parent PCB */
-  struct list child_list;	  /* List for child processes */
+  uint32_t* pagedir;			/* Page directory. */
+  struct dir* pwd;				/* Work directory */
+  char process_name[16];		/* Name of the main thread */
+  struct thread* main_thread;	/* Pointer to main thread */
+  struct file* exec_file;		/* Executable file */
+  void* fd_table[MAX_FD];		/* File despcriptor table */
+  bool isdir_table[MAX_FD];		/* Is fd a directory */
+  struct process* ppcb;			/* Parent PCB */
+  struct list child_list;		/* List for child processes */
 };
 
 void userprog_init(void);

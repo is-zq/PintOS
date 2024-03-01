@@ -38,8 +38,9 @@ struct inode_disk {
   block_sector_t indirect;		/* Indirect sector. */
   block_sector_t d_indirect;	/* Doubly indirect sector. */
   off_t length;					/* File size in bytes. */
+  bool is_dir;					/* Is directory */
   unsigned magic;				/* Magic number. */
-  uint32_t unused[112];			/* Not used. */
+  uint32_t unused[111];			/* Not used. */
 };
 
 /* Returns the number of sectors to allocate for an inode SIZE
@@ -382,7 +383,7 @@ void inode_init(void) {
    device.
    Returns true if successful.
    Returns false if memory or disk allocation fails. */
-bool inode_create(block_sector_t sector, off_t length) {
+bool inode_create(block_sector_t sector, off_t length, bool is_dir) {
   struct inode_disk* disk_inode = NULL;
   bool success = true;
 
@@ -396,6 +397,7 @@ bool inode_create(block_sector_t sector, off_t length) {
   if (disk_inode != NULL) {
     disk_inode->length = length;
     disk_inode->magic = INODE_MAGIC;
+	disk_inode->is_dir = is_dir;
 	size_t expected_num = (length + BLOCK_SECTOR_SIZE - 1) / BLOCK_SECTOR_SIZE;
 	size_t actual_num = alloc_space(disk_inode,0,expected_num);
 	if(expected_num != actual_num)
@@ -450,6 +452,9 @@ struct inode* inode_reopen(struct inode* inode) {
 
 /* Returns INODE's inode number. */
 block_sector_t inode_get_inumber(const struct inode* inode) { return inode->sector; }
+
+/* Returns INODE's open count */
+size_t inode_get_open_cnt(const struct inode* inode) { return inode->open_cnt; }
 
 /* Closes INODE and writes it to disk.
    If this was the last reference to INODE, frees its memory.
@@ -656,6 +661,12 @@ static void replace_cache(struct block* block,block_sector_t sector,int id)
 	cache[id].accessed = false;
 	cache[id].dirty = false;
 	block_read(block,sector,cache[id].data);
+}
+
+/* Returns is INODE a directory */
+bool inode_isdir(const struct inode* inode)
+{
+	return inode->data.is_dir;
 }
 
 static int clock_algorithm(struct block* block,block_sector_t sector)
