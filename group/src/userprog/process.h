@@ -36,6 +36,7 @@ typedef struct ChildNode
 {
 	pid_t pid;
 	int exit_status;
+	struct process* pcb;
 	struct semaphore sema;	/* Block parent process which called wait() */
 	struct list_elem elem;
 }ChildNode;

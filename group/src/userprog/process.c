@@ -106,6 +106,7 @@ static ChildNode* childList_add(struct list* child_list,pid_t pid)
 	ChildNode* node = (ChildNode*)malloc(sizeof(ChildNode));
 	node->pid = pid;
 	node->exit_status = 0;
+	node->pcb = NULL;
 	sema_init(&node->sema,0);
 	list_push_front(child_list,&node->elem);
 	return node;
@@ -116,6 +117,8 @@ static int childList_remove(struct list* child_list,pid_t pid)
 	ChildNode* rm = childList_get(child_list,pid);
 	if(rm != NULL)
 	{
+		if(rm->pcb != NULL)
+			rm->pcb->ppcb = NULL;
 		list_remove(&rm->elem);
 		free(rm);
 		return 1;
@@ -129,6 +132,8 @@ static void childList_destroy(struct list* child_list)
 	while(!list_empty(child_list))
 	{
 		ChildNode* node = list_entry(list_begin(child_list),ChildNode,elem);
+		if(node->pcb != NULL)
+			node->pcb->ppcb = NULL;
 		list_pop_front(child_list);
 		free(node);
 	}
@@ -293,8 +298,9 @@ pid_t process_execute(const char* file_name) {
   ChildNode* cn = childList_add(&t->pcb->child_list,tid);
   if(ret != -1)
   {
-	ln->pcb->ppcb = t->pcb;
-	sema_up(&ln->ch_sema);
+	  cn->pcb = ln->pcb;
+	  ln->pcb->ppcb = t->pcb;
+	  sema_up(&ln->ch_sema);
   }
   else
   {
@@ -494,7 +500,9 @@ void process_exit(void) {
 
   /* Free child processes */
   struct process* pcb_to_free = cur->pcb;
-  ChildNode* pcn = childList_get(&pcb_to_free->ppcb->child_list,cur->tid);
+  ChildNode* pcn = NULL;
+  if(pcb_to_free->ppcb != NULL)
+	  pcn = childList_get(&pcb_to_free->ppcb->child_list,cur->tid);
   childList_destroy(&pcb_to_free->child_list);
 
   /* Free user level threads */
@@ -535,7 +543,11 @@ void process_exit(void) {
   cur->pcb = NULL;
   free(pcb_to_free);
 
-  sema_up(&pcn->sema);
+  if(pcn != NULL)
+  {
+	  pcn->pcb = NULL;
+	  sema_up(&pcn->sema);
+  }
   thread_exit();
 }
 
