@@ -328,6 +328,7 @@ static void free_space(struct inode_disk* inode_disk,block_sector_t start,size_t
 	{
 		size_t expected_num = min(cnt,128-start);
 		struct indirect_block ind;
+		block_read_c(fs_device,inode_disk->indirect,&ind);
 		free_ind_space(&ind,start,expected_num);
 		if(indirect_block_empty(&ind))
 		{

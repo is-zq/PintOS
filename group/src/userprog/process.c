@@ -112,6 +112,7 @@ static ChildNode* childList_add(struct list* child_list,pid_t pid)
 	ChildNode* node = (ChildNode*)malloc(sizeof(ChildNode));
 	node->pid = pid;
 	node->exit_status = 0;
+	node->pcb = NULL;
 	sema_init(&node->sema,0);
 	list_push_front(child_list,&node->elem);
 	return node;
@@ -122,6 +123,8 @@ static int childList_remove(struct list* child_list,pid_t pid)
 	ChildNode* rm = childList_get(child_list,pid);
 	if(rm != NULL)
 	{
+		if(rm->pcb != NULL)
+			rm->pcb->ppcb = NULL;
 		list_remove(&rm->elem);
 		free(rm);
 		return 1;
@@ -135,6 +138,8 @@ static void childList_destroy(struct list* child_list)
 	while(!list_empty(child_list))
 	{
 		ChildNode* node = list_entry(list_begin(child_list),ChildNode,elem);
+		if(node->pcb != NULL)
+			node->pcb->ppcb = NULL;
 		list_pop_front(child_list);
 		free(node);
 	}
@@ -179,8 +184,9 @@ pid_t process_execute(const char* file_name) {
   ChildNode* cn = childList_add(&t->pcb->child_list,tid);
   if(ret != -1)
   {
-	ln->pcb->ppcb = t->pcb;
-	sema_up(&ln->ch_sema);
+	  cn->pcb = ln->pcb;
+	  ln->pcb->ppcb = t->pcb;
+	  sema_up(&ln->ch_sema);
   }
   else
   {
@@ -222,6 +228,7 @@ static void start_process(void* arg_) {
     strlcpy(t->pcb->process_name, t->name, sizeof t->name);
 	list_init(&t->pcb->child_list);
 	memset(t->pcb->fd_table,0,sizeof(t->pcb->fd_table));
+	memset(t->pcb->isdir_table,0,sizeof(t->pcb->isdir_table));
   }
 
   /* Initialize interrupt frame and load executable. */
@@ -305,9 +312,6 @@ static void start_process(void* arg_) {
     thread_exit();
   }
 
-  /* Initialize the fd_table */
-  memset(t->pcb->fd_table,0,sizeof(t->pcb->fd_table));
-
   /* Wake up the kernel thread, and sleep until kernel thread completes processing */
   LoadNode* ln = loadList_get(t->tid);
   ln->loaded = true;
@@ -374,7 +378,9 @@ void process_exit(void) {
     pagedir_destroy(pd);
   }
 
-  ChildNode* pcn = childList_get(&cur->pcb->ppcb->child_list,cur->tid);
+  ChildNode* pcn = NULL;
+  if(cur->pcb->ppcb != NULL)
+	  pcn = childList_get(&cur->pcb->ppcb->child_list,cur->tid);
 
   /* Free the PCB of this process and kill this thread
      Avoid race where PCB is freed before t->pcb is set to NULL
@@ -406,7 +412,11 @@ void process_exit(void) {
   cur->pcb = NULL;
   free(pcb_to_free);
 
-  sema_up(&pcn->sema);
+  if(pcn != NULL)
+  {
+	  pcn->pcb = NULL;
+	  sema_up(&pcn->sema);
+  }
   thread_exit();
 }
 

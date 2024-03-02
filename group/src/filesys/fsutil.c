@@ -115,7 +115,7 @@ void fsutil_extract(char** argv UNUSED) {
 
 	  struct dir* pwd = dir_open_root();
 	  if(pwd == NULL)
-	  PANIC("root dir open failed");
+		  PANIC("root dir open failed");
       /* Create destination file. */
       if (!filesys_create(file_name, size, pwd))
         PANIC("%s: create failed", file_name);
