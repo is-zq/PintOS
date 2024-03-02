@@ -32,7 +32,7 @@
 #include "threads/interrupt.h"
 #include "threads/thread.h"
 
-static struct list_elem* get_max_priority(struct semaphore* sema)
+static struct list_elem* sema_get_max_priority(struct semaphore* sema)
 {
 	if(list_empty(&sema->waiters))
 		return NULL;
@@ -52,9 +52,9 @@ static struct list_elem* get_max_priority(struct semaphore* sema)
 	return ret;
 }
 
-static struct list_elem* pop_max_priority(struct semaphore* sema)
+static struct list_elem* sema_pop_max_priority(struct semaphore* sema)
 {
-	struct list_elem* e = get_max_priority(sema);
+	struct list_elem* e = sema_get_max_priority(sema);
 	if(e != NULL)
 		list_remove(e);
 	return e;
@@ -135,7 +135,7 @@ void sema_up(struct semaphore* sema) {
 	  if(active_sched_policy == SCHED_FIFO)
 		thread_unblock(list_entry(list_pop_front(&sema->waiters), struct thread, elem));
 	  else if(active_sched_policy == SCHED_PRIO)
-		thread_unblock(list_entry(pop_max_priority(sema), struct thread, elem));
+		thread_unblock(list_entry(sema_pop_max_priority(sema), struct thread, elem));
   }
   sema->value++;
 
@@ -284,7 +284,7 @@ void lock_release(struct lock* lock) {
 		  list_remove(e);
 		  continue;
 	  }
-	  struct list_elem* ee = get_max_priority(&le->semaphore);
+	  struct list_elem* ee = sema_get_max_priority(&le->semaphore);
 	  if(ee != NULL)
 	  {
 		int prio = list_entry(ee,struct thread,elem)->effe_priority;
@@ -373,7 +373,7 @@ struct semaphore_elem {
   struct thread* holder;	  /* Semephore holder */
 };
 
-static struct list_elem* pop_max_priority_sema(struct condition* cond)
+static struct list_elem* cond_pop_max_priority(struct condition* cond)
 {
 	if(list_empty(&cond->waiters))
 		return NULL;
@@ -457,7 +457,7 @@ void cond_signal(struct condition* cond, struct lock* lock UNUSED) {
 	  if(active_sched_policy == SCHED_FIFO)
 		  sema_up(&list_entry(list_pop_front(&cond->waiters), struct semaphore_elem, elem)->semaphore);
 	  else if(active_sched_policy == SCHED_PRIO)
-		  sema_up(&list_entry(pop_max_priority_sema(cond),struct semaphore_elem,elem)->semaphore);
+		  sema_up(&list_entry(cond_pop_max_priority(cond),struct semaphore_elem,elem)->semaphore);
   }
 }
 

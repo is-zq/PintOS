@@ -73,6 +73,34 @@ static struct thread* thread_schedule_fair(void);
 static struct thread* thread_schedule_mlfqs(void);
 static struct thread* thread_schedule_reserved(void);
 
+static struct list_elem* get_max_priority(struct list* list)
+{
+	if(list_empty(list))
+		return NULL;
+	struct list_elem* e = list_begin(list);
+	struct list_elem* end = list_end(list);
+	struct thread* t = list_entry(e,struct thread,elem);
+	struct list_elem* ret = e;
+	for(e = list_next(e);e != end;e = list_next(e))
+	{
+		struct thread* te = list_entry(e,struct thread,elem);
+		if(te->effe_priority > t->effe_priority)
+		{
+			t = te;
+			ret = e;
+		}
+	}
+	return ret;
+}
+
+static struct list_elem* pop_max_priority(struct list* list)
+{
+	struct list_elem* e = get_max_priority(list);
+	if(e != NULL)
+		list_remove(e);
+	return e;
+}
+
 /* Determines which scheduler the kernel should use.
    Controlled by the kernel command-line options
     "-sched=fifo", "-sched=prio",
@@ -250,17 +278,7 @@ static void thread_enqueue(struct thread* t) {
   if (active_sched_policy == SCHED_FIFO)
     list_push_back(&fifo_ready_list, &t->elem);
   else if(active_sched_policy == SCHED_PRIO)
-  {
-	struct list_elem* e;
-	struct list_elem* end = list_end(&priority_ready_list);
-	for(e = list_begin(&priority_ready_list);e != end;e = list_next(e))
-	{
-		struct thread* te = list_entry(e,struct thread,elem);
-		if(te->effe_priority < t->effe_priority)
-			break;
-	}
-	list_insert(e,&t->elem);
-  }
+    list_push_back(&priority_ready_list, &t->elem);
   else
     PANIC("Unimplemented scheduling policy value: %d", active_sched_policy);
 }
@@ -507,7 +525,7 @@ static struct thread* thread_schedule_fifo(void) {
 /* Strict priority scheduler */
 static struct thread* thread_schedule_prio(void) {
   if(!list_empty(&priority_ready_list))
-	  return list_entry(list_pop_front(&priority_ready_list),struct thread,elem);
+	  return list_entry(pop_max_priority(&priority_ready_list),struct thread,elem);
   else
 	  return idle_thread;
 }
@@ -619,5 +637,5 @@ uint32_t thread_stack_ofs = offsetof(struct thread, stack);
 
 bool is_highest_priority()
 {
-	return list_empty(&priority_ready_list) || list_entry(list_front(&priority_ready_list),struct thread,elem)->effe_priority <= thread_current()->effe_priority;
+	return list_empty(&priority_ready_list) || list_entry(get_max_priority(&priority_ready_list),struct thread,elem)->effe_priority <= thread_current()->effe_priority;
 }
