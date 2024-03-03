@@ -327,7 +327,10 @@ static int syscall_read(int fd,void* buffer,unsigned size)
 		return -1;
 	if(fd == STDIN_FILENO)
 	{
-		return input_getc();
+		char* p = (char*)buffer;
+		while(size--)
+			*p++ = input_getc();
+		return size;
 	}
 	else
 	{
