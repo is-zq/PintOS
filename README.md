@@ -2,4 +2,7 @@
 This is the hw and lab code repository for CS162 2023 FALL.
 official website: https://cs162.org/
 
-Project 2 has some bugs, with 33 test points failing.
+updated on March 3, 2024:
+    proj1: all tests passed
+    Proj2: 33 of 162 failed
+    proj3: 1 of 142 failed.(dir_rm_cwd)
