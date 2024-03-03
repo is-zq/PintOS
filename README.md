@@ -2,5 +2,7 @@
 This is the hw and lab code repository for CS162 2023 FALL.
 official website: https://cs162.org/
 
-My hw-list/pwords cannot output the correct results,which is different from lwords,but I don't know which one is wrong.
-If you know, please modify it and tell me in README.
+updated on March 3, 2024:
+    proj1: all tests passed
+    Proj2: 33 of 162 failed
+    proj3: 1 of 142 failed.(dir_rm_cwd)
