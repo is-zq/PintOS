@@ -40,49 +40,49 @@ Summary of UCB-CS162 Pintos lab
 Proj1 userprog:
 	This section mainly implements process control system calls and basic file operating system calls, including process_exit (terminating the 
 current process), process_exec (creating a child process and loading the specified program), process_wait (waiting for the child process to exit), 
-file_open, close, read, write, etc
+file_open, close, read, write, etc.
 	In order to synchronize the behavior of the parent and child processes when loading the child process program (the parent process waits 
-for the child process program to load, and the child process waits for the parent process to add it to the child process list), I used a loadList linked list 
-to save the process being loaded. The node type loadNode has two semaphores to achieve synchronization Each PCB has a childList that maintains sub 
-process information, including PID, PCB, exit status, and semaphores used during process_wait For user process file operations, I used an fd_table array 
+for the child process program to load, and the child process waits for the parent process to add it to the child process list), I used a loadList linked list.
+to save the process being loaded, the node type loadNode has two semaphores to achieve synchronization. Each PCB has a childList that maintains sub 
+process information, including PID, PCB, exit status, and semaphores used during process_wait For user process file operations, I used an fd_table array
 in PCB to maintain open files and used file descriptors as subscripts for random access, improving efficiency. However, at the same time, the number of 
-files that user processes can open is limited to 128 When the process exits, close all open files and destroy its own childList, and set parent_pcb to NULL 
-for child processes that have not exited
+files that user processes can open is limited to 128. When the process exits, close all open files and destroy its own childList, and set parent_pcb to NULL 
+for child processes that have not exited.
 	This section has given me a deeper understanding of process management, including the process of process creation, the management bet-
 ween parent and child processes, and the process of process exit. At the same time, I have gained a basic understanding of file operations, gained an 
-understanding of file management for user processes, and gained a preliminary understanding of writing and debugging kernel code
+understanding of file management for user processes, and gained a preliminary understanding of writing and debugging kernel code.
 
 Proj2 threads:
-	This section mainly implements a strict priority scheduling strategy with a priority transfer mechanism (when A waits for B, if A's priority is greater 
-than B, B's priority is temporarily raised to be the same as A) and system calls for user level threads and synchronization mechanisms, similar to the ptthread 
+	This section mainly implements a strict priority scheduling strategy with a priority donation (when A waits for B, if A's priority is greater 
+than B, B's priority is temporarily raised to be the same as A) and system calls for user level threads and synchronization, similar to the pthread 
 library in Linux, including pthread_create, exit, join, as well as system calls for semaphores and mutexes
-	For the implementation of priority scheduling, I initially wanted to use priority queues, but due to the need to implement priority transmission, the 
+	For the implementation of priority scheduling, I initially wanted to use priority queues, but due to the need to implement priority donation, the 
 priority of threads in the queue may be modified. However, implementing priority queues for modification is more cumbersome, and there are many threads, 
-so using sequential storage can cause space waste. Therefore, I used a list For the implementation of priority transfer, I added waitinglock and lockunlist in TCB 
-to store waiting locks and held locks respectively. When applying for a lock, I used a loop to recursively pass priority level by level to the holder of waitinglock 
+so using sequential storage can cause space waste. Therefore, I used a priority_ready_list. For the implementation of priority donation, I added waitinglock and lockunlist in TCB 
+to store waiting locks and held locks respectively. When requiring for a lock, I used a loop to recursively pass priority level by level to the holder of waitinglock 
 When releasing the lock, find the maximum priority in the lock_list to update the priority For the implementation of the pthread library, add thread_list, lock_list, 
 sema_list in the pcb, use the pthreadNode to maintain user threads, save their join and exit information, and create a user thread. To create a user thread, you 
-need to allocate interrupt stack frames for it, then create a kernel thread, and set a separate stack pointer for it. A one-to-one model has been implemented Join 
-all other threads of the main thread when it exits Exit all threads when the process exits
-	This section has given me a deeper understanding of thread management, thread scheduling, thread models, and synchronization mechanisms, and 
+need to allocate interrupt stack frames for it, then create a kernel thread, and set a separate stack pointer for it. A one-to-one model has been implemented. Join 
+all other threads of the main thread when it exits. Exit all threads when the process exits
+	This section has given me a deeper understanding of thread management, thread scheduling, thread models, and synchronization, and 
 further deepened my understanding of kernel code
 
 Proj3 filesys:
 	This section mainly implements file read and write cache, extensible files, directory trees, and improves and optimizes the file system of Pintos
 	For the replacement algorithm of cache, I use the enhanced clock algorithm, which uses access and modification bits as selection criteria. In the first 
 round of scanning, these two bits are found to be 00 (the first 0 represents unreachable and the last 0 represents unmodified, the same below). If not found, 
-scan again for 01, and at the same time, scan for the access position 0. If not found, repeat the above scanning The advantage of this algorithm is that it takes 
-into account both recently accessed and modified situations, reducing the overall number of replacements while also reducing the number of writes For the im-
+scan again for 01, and at the same time, set the scaned access bit 0. If not found, repeat the above scanning. The advantage of this algorithm is that it takes 
+into account both recently accessed and modified situations, reducing the overall number of replacements while also reducing the number of writes. For the im-
 plementation of extensible files, I adopt a UNIX-FS like approach. In the inode block, there is an array of storage block numbers with a length of 12, which is 
 used to directly access the block. Files larger than the supported size of the array will be indexed by an indirect access pointer, which points to an index block. 
 Within the index block, the block number to be accessed will be found. If the first level index is not enough to index the file, the remaining part will be indexed 
 by a second level index pointer, which points to the second level index block. This index block stores the block number of the first level index block, and then fu-
-rther indexed Pintos has an address length of 32 and a block size of 4KB, which can support approximately 4GB of files In the directory tree section, all operations 
+rther indexed. Pintos has an address length of 32 and a block size of 4KB, which can support approximately 4GB of files. In the directory tree section, all operations 
 on files must first open the directory file in which they are located. This step requires parsing the file path, supporting absolute and relative paths. Each process needs 
-to save the current working directory and make corresponding modifications in the directory file after operating on the file
+to save the current working directory and make corresponding modifications in the directory file after operating on the file.
 	This section has given me a deeper understanding of file systems, directory structures, caching, and UNIX's inode file storage. It has also further improved 
-my ability to write and debug kernel code
+my ability to write and debug kernel code.
 
 	Overall, the difficulty of this experiment was relatively high for me. I referred to a lot of code on GitHub, but in the end, there were still some test points that 
 did not pass. However, this experiment gave me a deeper understanding of the underlying operating system, and I also gained some experience in writing and debug-
-ging kernel code, which was quite profitable
+ging kernel code, which was quite profitable.
