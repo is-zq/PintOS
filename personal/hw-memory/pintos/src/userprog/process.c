@@ -282,6 +282,9 @@ bool load(const char* file_name, void (**eip)(void), void** esp) {
   /* Start address. */
   *eip = (void (*)(void))ehdr.e_entry;
 
+  /* Set up heap */
+  t->seg_break = t->heap_start;
+
   success = true;
 
 done:
@@ -357,6 +360,7 @@ static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t 
   ASSERT(pg_ofs(upage) == 0);
   ASSERT(ofs % PGSIZE == 0);
 
+  struct thread* t = thread_current();
   file_seek(file, ofs);
   while (read_bytes > 0 || zero_bytes > 0) {
     /* Calculate how to fill this page.
@@ -387,6 +391,9 @@ static bool load_segment(struct file* file, off_t ofs, uint8_t* upage, uint32_t 
     read_bytes -= page_read_bytes;
     zero_bytes -= page_zero_bytes;
     upage += PGSIZE;
+
+	/* Update heap start */
+	t->heap_start = upage > t->heap_start ? upage:t->heap_start;
   }
   return true;
 }
