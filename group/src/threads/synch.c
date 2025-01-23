@@ -215,23 +215,16 @@ void lock_acquire(struct lock* lock) {
   struct thread* t = thread_current();
   if(lock->holder != NULL)
   {
-	  struct thread* ct = t;
-	  struct lock* cl = lock;
-	  ct->waiting_lock = cl;
-	  bool flag = true;
-	  while(cl != NULL && flag)
-	  {
-  	  	  struct thread* ht = cl->holder;
-	  	  if(ct->effe_priority > ht->effe_priority)
-	  	  {
-	  		  ht->effe_priority = ct->effe_priority;
-	  		  flag = true;
-	  	  }
-	  	  else
-	  		  flag = false;
-	  	  ct = ht;
-		  cl = ct->waiting_lock;
-	  }
+	struct thread* ct = t;
+	struct lock* cl = lock;
+	ct->waiting_lock = cl;
+	while (cl != NULL && ct->effe_priority > cl->holder->effe_priority)
+	{
+		struct thread* ht = cl->holder;
+      		ht->effe_priority = ct->effe_priority;
+      		ct = ht;
+      		cl = ct->waiting_lock;
+	}
   }
 
   sema_down(&lock->semaphore);
