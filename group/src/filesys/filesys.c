@@ -145,11 +145,7 @@ bool filesys_remove(const char* name, struct dir* pwd) {
   if(inode_isdir(inode))
   {
 	  struct dir* dir_to_rm = dir_open(inode);
-	  if (inode_get_inumber(dir_get_inode(pwd)) == inode_get_inumber(dir_get_inode(dir_to_rm)))
-	  {
-		  success = dir_remove(pwd,"..") && dir_remove(pwd,".") && dir_remove(dir,filename);
-	  }
-	  else if(dir_entry_number(dir_to_rm) != 2)
+	  if(dir_entry_number(dir_to_rm) != 2 || inode_get_open_cnt(dir_get_inode(dir_to_rm)) > 1)
 	  {
 		  success = false;
 		  dir_close(dir_to_rm);
